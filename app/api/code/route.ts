@@ -5,37 +5,34 @@ import axios from "axios";
 
 const MAX_RETRIES = 3;
 
-async function fetchEdenAICompletion(messages: any, retries: number = MAX_RETRIES): Promise<any> {
+const fetchEdenAICodeGeneration = async (prompt: string, retries: number = MAX_RETRIES): Promise<string> => {
     const options = {
         method: "POST",
-        url: "https://api.edenai.run/v2/text/chat",
+        url: "https://api.edenai.run/v2/text/code_generation",
         headers: {
             authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZWU1MDJmODAtZDA2Yy00NjhhLWJjYjgtZGQwYTY4ODNmNjJkIiwidHlwZSI6ImFwaV90b2tlbiJ9.0mQCkssyqVGcXL_S7lN36wRWYeQJO8uBSuqzfOCYj1Q",  // Replace with your actual API key
         },
         data: {
             providers: "openai",
-            text: messages[messages.length - 1].content,
-            chatbot_global_action: "Act as an assistant",
-            previous_history: messages.slice(0, -1),
-            temperature: 0.0,
-            max_tokens: 150,
+            prompt,
+            instruction: "You are a code generator. You must answer only in markdown code snippets. Use code comments for explanation",
+            temperature: 0.1,
+            max_tokens: 500,
         },
     };
 
     try {
         const response = await axios.request(options);
-        // Extract the generated text from the response
-        const assistantMessage = response.data.openai.generated_text;
-        return assistantMessage;
+        return response.data.openai.generated_text;
     } catch (error: any) {
         if (retries > 0 && error.code === 'ECONNRESET') {
             console.log(`Retrying... (${MAX_RETRIES - retries + 1}/${MAX_RETRIES})`);
             await new Promise(res => setTimeout(res, 1000)); // Wait 1 second before retrying
-            return fetchEdenAICompletion(messages, retries - 1);
+            return fetchEdenAICodeGeneration(prompt, retries - 1);
         }
         throw error;
     }
-}
+};
 
 export async function POST(req: Request): Promise<NextResponse> {
     try {
@@ -50,7 +47,8 @@ export async function POST(req: Request): Promise<NextResponse> {
             return new NextResponse("Messages are required", { status: 400 });
         }
 
-        const completionMessage = await fetchEdenAICompletion(messages);
+        const userMessage = messages[messages.length - 1];
+        const completionMessage = await fetchEdenAICodeGeneration(userMessage.content);
         return NextResponse.json(completionMessage);
 
     } catch (error: any) {
@@ -59,6 +57,6 @@ export async function POST(req: Request): Promise<NextResponse> {
         if (error.code === 'ECONNRESET') {
             errorMessage = "Connection reset by server";
         }
-        return new NextResponse(error, { status: 500 });
+        return new NextResponse(errorMessage, { status: 500 });
     }
 }
